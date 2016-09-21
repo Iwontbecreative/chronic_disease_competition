@@ -4,7 +4,7 @@ Transform data so it is easier on ram.
 
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
-
+import glob
 
 sources = ['data2.csv', 'test2.csv']
 
@@ -28,10 +28,34 @@ def pre_treatment():
     le.fit(names)
     return le, common
 
+def generate_hospidiag(cols=['finess']):
+    """
+    We want to be able to handle hospidiag data so it can be merged nicely
+    with the rest of the information we have.
+    Cols describes which columns (text) we should keep.
+    """
+
+    merged_csv = pd.DataFrame()
+    for csv in glob.glob('hospidiag/*.csv'):
+        year = int(csv[-8:-4])
+        # Due to a bug in pandas we load all the columns then
+        # select the ones we keep
+        current = pd.read_csv(csv)[cols]
+        current = current.rename(columns = {'finess':'eta'})
+        # We add the year as a variable so that our merge
+        # works on both eta and year.
+        current['an'] = [year] * len(current)
+        merged_csv = pd.concat([merged_csv, current])
+    # Reindex to avoid any weird interaction with multiple indexes.
+    merged_csv.index = list(range(len(merged_csv)))
+    return merged_csv
+
+hospidiag = generate_hospidiag(['finess', 'A7'])
 le, common = pre_treatment()
 
+
 for source in sources:
-    data = pd.read_csv(source, sep=';')
+    data = pd.read_csv(source, sep=';', dtype={'Finess': str})
 
     is_test = 'test' in source
 
@@ -45,6 +69,9 @@ for source in sources:
         columns.append('label')
 
     data.columns = columns
+
+    # We want to manipulate before treating so changes can be done on both datasets (e.g for eta).
+    data = pd.merge(data, hospidiag, how='left', on=['eta', 'an'])
 
     # Just manipulate for treatment
     data.eta = data.eta.apply(lambda s: int(str(s).replace('2A', '2000').replace('2B', '2001')))
@@ -61,4 +88,4 @@ for source in sources:
 
     # Export to csv
     suffix = 'test' if is_test else 'data'
-    data.to_csv('proc_{}.csv'.format(suffix), index=False)
+    # data.to_csv('proc_{}.csv'.format(suffix), index=False)
