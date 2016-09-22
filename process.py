@@ -6,7 +6,8 @@ from sklearn.metrics import mean_squared_error
 from datetime import datetime
 import csv
 
-LOCAL = False
+LOCAL = True
+CV = 1  # Number of folds to do on CV.
 
 def output_csv(pred):
     with open('run/output_{}.csv'.format(datetime.now()), 'w') as output:
@@ -14,7 +15,7 @@ def output_csv(pred):
         writer.writerow(['id', 'cible'])
         writer.writerows(enumerate(pred))
 
-def split(data, before=2013):
+def split(data, before=2012):
     """
     Small utility to split data based on years
     """
@@ -25,6 +26,20 @@ def split(data, before=2013):
     Xtest.drop(['label'], axis=1, inplace=True)
     return Xtrain, Xtest, ytrain, ytest
 
+def cv_split(data, i):
+    """
+    Small wrapper around split to have it work nicely in CV.
+    1) Train < 2012, Test = 2012-2013
+    2) Train > 2009, Test = 2008-2009
+    ... #TODO
+    """
+    if not i:
+        return split(data)
+    elif i == 1:
+        a, b, c, d = split(data, before=2010)
+        return b, a, d, c
+    return split(data)
+
 def add_features(data):
     data['pourc_ald'] = data.nombre_sej_ald / data.nombre_sej
     return data
@@ -32,21 +47,35 @@ def add_features(data):
 start = datetime.now()
 
 print('Started process at {:%H:%M:%S}'.format(start))
-data = pd.read_csv('proc_data.csv')
+
+# Experiments...
+to_keep = ['eta', 'nom_eta', 'prov_patient', 'dom_acti', 'age',
+        'nombre_sej_ald', 'nombre_sej', 'an', 'label']
+# Extend with those that passed the treshold (> 0.1% contrib)
+to_keep.extend(['A9', 'A12', 'A13', 'A14', 'CI_AC1', 'CI_AC4',
+    'CI_AC6', 'CI_AC7', 'CI_A5', 'CI_A12', 'CI_A15'])
+# Add some testing ones
+to_keep.extend(['champ_pmsi', 'cat', 'taille_MCO', 'taille_M',
+    'taille_C', 'taille_O'])
+
+data = pd.read_csv('proc_data.csv', usecols=to_keep)
 data = add_features(data)
+
 RFR = RandomForestRegressor(n_estimators=30, random_state=1, n_jobs=4)
+                            # max_depth=10)
 
 if LOCAL:
-    Xtrain, Xtest, ytrain, ytest = split(data)
-    start_train = datetime.now()
-    print('Started training at {:%H:%M:%S}'.format(start_train))
-    RFR.fit(Xtrain, ytrain)
-    print('Training took : {} seconds'.format(datetime.now()-start_train))
-    pred = RFR.predict(Xtest)
-    print('Score was :', mean_squared_error(ytest, pred)**0.5*100)
-    print('Feature importances were :')
-    for col, imp in zip(Xtrain.columns, RFR.feature_importances_*100):
-        print(col, ':', imp)
+    for i in range(CV):
+        Xtrain, Xtest, ytrain, ytest = cv_split(data, i)
+        start_train = datetime.now()
+        print('Started training at {:%H:%M:%S}'.format(start_train))
+        RFR.fit(Xtrain, ytrain)
+        print('Training took : {} seconds'.format(datetime.now()-start_train))
+        pred = RFR.predict(Xtest)
+        print('Score was :', mean_squared_error(ytest, pred)**0.5*100)
+        print('Feature importances were :')
+        for col, imp in zip(Xtrain.columns, RFR.feature_importances_*100):
+            print(col, ':', imp)
 
 else:
     labels = data.label

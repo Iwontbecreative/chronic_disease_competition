@@ -11,30 +11,24 @@ sources = ['data2.csv', 'test2.csv']
 def pre_treatment():
     """
     We want to use the 'raison_sociale' field on both files.
-    We extract:
-    1) First words which occur often (top 20) as they signal the kind
-       of health institution.
-    2) A labelencoder to be able to use this information.
+    We extract a labelencoder to be able to use this information.
     """
     names = []
     for source in sources:
         ser = pd.read_csv(source, usecols=['Raison sociale'], sep=';').ix[:, 0]
         names.extend(list(ser))
-    # 1)
-    first_words = pd.Series(s.split(' ')[0] for s in names).value_counts().head(20)
-    common = list(first_words.index)
-    # 2)
     le = LabelEncoder()
     le.fit(names)
-    return le, common
+    return le
 
-def generate_hospidiag(cols=['finess']):
+def generate_hospidiag(cols, exceptions):
     """
     We want to be able to handle hospidiag data so it can be merged nicely
     with the rest of the information we have.
     Cols describes which columns (text) we should keep.
+    Exceptions are columns that are not handled as numbers.
     """
-
+    print('Working on hospidiag')
     merged_csv = pd.DataFrame()
     for csv in glob.glob('hospidiag/*.csv'):
         year = int(csv[-8:-4])
@@ -48,13 +42,57 @@ def generate_hospidiag(cols=['finess']):
         merged_csv = pd.concat([merged_csv, current])
     # Reindex to avoid any weird interaction with multiple indexes.
     merged_csv.index = list(range(len(merged_csv)))
+    # For all columns aside from eta, we want to transform it to numeric
+    # despite many variations of weird formatting
+    for col in merged_csv.columns:
+        if (col not in ('an', 'eta')) and (col not in exceptions):
+            merged_csv[col] = merged_csv[col].apply(handle_ugliness)
+    le = LabelEncoder()
+    for col in exceptions:
+        merged_csv[col] = merged_csv[col].fillna('Void')
+        merged_csv[col] = le.fit_transform(merged_csv[col])
+    print('Finished working on hospidiag')
     return merged_csv
 
-hospidiag = generate_hospidiag(['finess', 'A7'])
-le, common = pre_treatment()
+def handle_ugliness(x):
+    """
+    We want to provide a nice way to convert a column to float.
+    This accounts for NaN, numeric values, and annoying , instead of .
+    """
+    if isinstance(x, str):
+        try:
+            return float(x.replace(',', '.'))
+        except ValueError:
+            return -1
+    else:
+        if pd.isnull(x):
+            return -1
+        return x
+
+cols = ['finess']
+# Add a bunch of numerical columns...
+cols.extend(['A{}'.format(i) for i in range(7, 16)])
+cols.extend(['F{}_O'.format(i) for i in range(1, 13)])
+cols.extend(['F{}_D'.format(i) for i in range(1, 13)])
+cols.extend(['P{}'.format(i) for i in range(1, 17)])
+cols.extend(['RH{}'.format(i) for i in range(1, 11)])
+cols.remove('RH7') # Lacking in 2008, too much trouble.
+cols.extend(['CI_AC{}'.format(i) for i in range(1, 10)])
+cols.extend(['CI_A{}'.format(i) for i in range(1, 16)])
+cols.extend(['CI_E{}'.format(i) for i in range(1, 8)])
+cols.extend(['CI_F{}_O'.format(i) for i in range(1, 18)])
+cols.extend(['CI_F{}_D'.format(i) for i in range(1, 18)])
+cols.extend(['CI_RH{}'.format(i) for i in range(1, 12)])
+# The categorical ones.
+exceptions = ['champ_pmsi', 'cat', 'taille_MCO', 'taille_M', 'taille_C',
+              'taille_O']
+cols.extend(exceptions)
+hospidiag = generate_hospidiag(cols, exceptions)
+le = pre_treatment()
 
 
 for source in sources:
+    print('Starting to process :', source)
     data = pd.read_csv(source, sep=';', dtype={'Finess': str})
 
     is_test = 'test' in source
@@ -79,13 +117,8 @@ for source in sources:
     data.prov_patient = data.prov_patient.apply(lambda s: s.replace('Inconnu', '0').replace('2A', '2000').replace('2B', '2001'))
     data.prov_patient = data.prov_patient.apply(lambda s: int(s.split('-')[0]))
     data.age = data.age.apply(lambda s: int(s == '>75 ans'))
-
-    # Before using LE, we want to be able to retrieve the first-word.
-    first_word = data.nom_eta.apply(lambda s: s.split(' ')[0])
-    for word in common:
-        data['prem_mot_{}'.format(word)] = first_word.apply(lambda s: int(s == word))
     data.nom_eta = le.transform(data.nom_eta)
 
     # Export to csv
     suffix = 'test' if is_test else 'data'
-    # data.to_csv('proc_{}.csv'.format(suffix), index=False)
+    data.to_csv('proc_{}.csv'.format(suffix), index=False)
