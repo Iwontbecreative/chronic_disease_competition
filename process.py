@@ -7,7 +7,7 @@ from datetime import datetime
 import csv
 
 LOCAL = True
-CV = 1  # Number of folds to do on CV.
+CV = 2  # Number of folds to do on CV.
 
 def output_csv(pred):
     with open('run/output_{}.csv'.format(datetime.now()), 'w') as output:
@@ -22,9 +22,8 @@ def split(data, before=2012):
     mask = data.an < before
     Xtrain, Xtest = data[mask], data[~mask]
     ytrain, ytest = Xtrain.label, Xtest.label
-    Xtrain.drop(['label'], axis=1, inplace=True)
-    Xtest.drop(['label'], axis=1, inplace=True)
-    return Xtrain, Xtest, ytrain, ytest
+    mask = Xtrain.columns != 'label'
+    return Xtrain.loc[:, mask], Xtest.loc[:, mask], ytrain, ytest
 
 def cv_split(data, i):
     """
@@ -55,27 +54,33 @@ to_keep = ['eta', 'nom_eta', 'prov_patient', 'dom_acti', 'age',
 to_keep.extend(['A9', 'A12', 'A13', 'A14', 'CI_AC1', 'CI_AC4',
     'CI_AC6', 'CI_AC7', 'CI_A5', 'CI_A12', 'CI_A15'])
 # Add some testing ones
-to_keep.extend(['champ_pmsi', 'cat', 'taille_MCO', 'taille_M',
-    'taille_C', 'taille_O'])
+to_keep.extend(['cat'])
 
 data = pd.read_csv('proc_data.csv', usecols=to_keep)
 data = add_features(data)
 
 RFR = RandomForestRegressor(n_estimators=30, random_state=1, n_jobs=4)
-                            # max_depth=10)
 
 if LOCAL:
+    start_train = datetime.now()
+    print('Started training at {:%H:%M:%S}'.format(start_train))
+    scores = []
+    f_i = []
     for i in range(CV):
+        print('CV round ', i)
         Xtrain, Xtest, ytrain, ytest = cv_split(data, i)
-        start_train = datetime.now()
-        print('Started training at {:%H:%M:%S}'.format(start_train))
         RFR.fit(Xtrain, ytrain)
-        print('Training took : {} seconds'.format(datetime.now()-start_train))
         pred = RFR.predict(Xtest)
-        print('Score was :', mean_squared_error(ytest, pred)**0.5*100)
-        print('Feature importances were :')
-        for col, imp in zip(Xtrain.columns, RFR.feature_importances_*100):
-            print(col, ':', imp)
+        scores.append(mean_squared_error(ytest, pred)**0.5*100)
+        f_i.append(RFR.feature_importances_*100)
+
+    print('Training took : {} seconds'.format(datetime.now()-start_train))
+    print('Score : Mean {}, Max {}, Min {}'.format(sum(scores)/len(scores),
+                                                   max(scores), min(scores)))
+
+    print('Mean feature importances were :')
+    for col, imp in zip(Xtrain.columns, sum(f_i)/len(f_i)):
+        print(col, ':', imp)
 
 else:
     labels = data.label
