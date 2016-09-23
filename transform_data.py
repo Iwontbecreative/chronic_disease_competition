@@ -66,7 +66,7 @@ def handle_ugliness(x):
             return -1
     else:
         if pd.isnull(x):
-            return -1
+            return -1000 # Need to be negative for e.g margin rate.
         return x
 
 cols = ['finess']
