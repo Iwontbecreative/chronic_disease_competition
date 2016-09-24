@@ -22,7 +22,7 @@ def split(data, before=2012):
     mask = data.an < before
     Xtrain, Xtest = data[mask], data[~mask]
     ytrain, ytest = Xtrain.label, Xtest.label
-    mask = Xtrain.columns != 'label'
+    mask = ~Xtrain.columns.isin(['label'])
     return Xtrain.loc[:, mask], Xtest.loc[:, mask], ytrain, ytest
 
 def cv_split(data, i):
@@ -52,14 +52,15 @@ to_keep = ['eta', 'nom_eta', 'prov_patient', 'dom_acti', 'age',
         'nombre_sej_ald', 'nombre_sej', 'an', 'label']
 # Extend with those that passed the treshold (> 0.1% contrib)
 to_keep.extend(['A9', 'A12', 'A13', 'A14', 'CI_AC1', 'CI_AC4',
-    'CI_AC6', 'CI_AC7', 'CI_A5', 'CI_A12', 'CI_A15'])
+    'CI_AC6', 'CI_AC7', 'CI_A5', 'CI_A12', 'CI_A15',  'P2', 'P13', 'P9',
+    'P12', 'P14', 'cat', 'A1bis'])
 # Add some testing ones
-to_keep.extend(['cat'])
-
+to_keep.extend(['RH{}'.format(i) for i in range(2, 5)])
 data = pd.read_csv('proc_data.csv', usecols=to_keep)
+data = data.fillna(-1000)
 data = add_features(data)
 
-RFR = RandomForestRegressor(n_estimators=30, random_state=1, n_jobs=4)
+RFR = RandomForestRegressor(n_estimators=20, random_state=1, n_jobs=4, max_features='sqrt')
 
 if LOCAL:
     start_train = datetime.now()
@@ -77,21 +78,24 @@ if LOCAL:
     print('Training took : {} seconds'.format(datetime.now()-start_train))
     print('Score : Mean {}, Max {}, Min {}'.format(sum(scores)/len(scores),
                                                    max(scores), min(scores)))
+    for i, j in enumerate(scores):
+        print('Score {} : {}'.format(i, j))
 
     print('Mean feature importances were :')
     for col, imp in zip(Xtrain.columns, sum(f_i)/len(f_i)):
         print(col, ':', imp)
 
 else:
-    labels = data.label
-    data.drop(['label'], axis=1, inplace=True)
     start_train = datetime.now()
     print('Started training at {:%H:%M:%S}'.format(start_train))
-    RFR.fit(data, labels)
+    RFR.fit(data.loc[:, data.columns != label], data.label)
     print('Training took : {} seconds'.format(datetime.now()-start_train))
+    for col, imp in zip(data.columns, RFR.feature_importances_*100):
+        print(col, ':', imp)
 
     del data
-    test = pd.read_csv('proc_test.csv')
+    to_keep.remove('label')
+    test = pd.read_csv('proc_test.csv', usecols=to_keep)
     test = add_features(test)
     ypred = RFR.predict(test)
     print('Average prediction is :', sum(ypred)/len(ypred))
