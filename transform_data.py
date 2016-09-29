@@ -1,5 +1,7 @@
 """
-Transform data so it is easier on ram.
+Transform chronic disease data so it is easier on ram and easier to
+manipulate. We also join external sources (hospidiag reports) as additional
+features for our predictive model.
 """
 
 import pandas as pd
@@ -10,8 +12,9 @@ sources = ['data2.csv', 'test2.csv']
 
 def pre_treatment():
     """
-    We want to use the 'raison_sociale' field on both files.
-    We extract a labelencoder to be able to use this information.
+    We want to use the 'raison_sociale' field on both files to ensure classes
+    are consistent across both files. One-hot-encoding does not work here because
+    #{establishment} ~= 1300. 
     """
     names = []
     for source in sources:
@@ -35,8 +38,6 @@ def generate_hospidiag(cols, exceptions):
         merged_csv = pd.DataFrame()
         for csv in glob.glob('hospidiag/{}*.csv'.format(kind_of)):
             year = int(csv[-8:-4])
-        # Due to a bug in pandas we load all the columns then
-        # select the ones we keep
             current = pd.read_csv(csv, usecols=cols[i])
             current = current.rename(columns = {'finess':'eta'})
             # We add the year as a variable so that our merge
@@ -92,16 +93,16 @@ cols, exceptions = [], []
 cols_hospi = ['finess']
 # Add a bunch of numerical columns...
 cols_hospi.extend(['A9', 'A12', 'A13', 'A14'])
-# Those proved not very useful.
+# # Those proved not very useful.
 # cols_hospi.extend(['F{}_O'.format(i) for i in range(1, 13)])
 # cols_hospi.extend(['F{}_D'.format(i) for i in range(1, 13)])
-cols_hospi.extend(['P2', 'P9', 'P12', 'P13', 'P14'])
-cols_hospi.extend(['RH{}'.format(i) for i in (2, 3, 4)])
+cols_hospi.extend(['P2', 'P9', 'P12', 'P13', 'P14', 'P15'])
+cols_hospi.extend(['RH{}'.format(i) for i in (2, 3, 4, 5)])
 cols_hospi.extend(['CI_AC{}'.format(i) for i in (1, 4, 6, 7)])
-cols_hospi.extend(['CI_A{}'.format(i) for i in (5, 12, 15)])
+cols_hospi.extend(['CI_A{}'.format(i) for i in (2, 5, 7, 8, 12, 15)])
 cols_hospi.extend(['CI_E{}'.format(i) for i in range(1, 8)])
 cols_hospi.extend(['CI_DF{}'.format(i) for i in range(1, 6)])
-# cols_hospi.extend(['Q{}'.format(i) for i in range(1, 12)])
+cols_hospi.extend(['Q{}'.format(i) for i in range(1, 12)])
 cols_hospi.extend(['CI_E4_V2', 'CI_E7_V2'])
 # Those proved not very useful.
 # cols_hospi.extend(['CI_F{}_O'.format(i) for i in range(1, 18)])
