@@ -71,7 +71,10 @@ def generate_hospidiag(cols, exceptions):
         le = LabelEncoder()
         for col in exceptions[i]:
             merged_csv[col] = merged_csv[col].fillna('Void')
-            merged_csv[col] = le.fit_transform(merged_csv[col])
+            if 'CI_A16' in col:
+                merged_csv[col] = merged_csv[col].apply(remove_text)
+            else:
+                merged_csv[col] = le.fit_transform(merged_csv[col])
         # Variable 'zone' exists in both
         if 'zone' in merged_csv.columns:
             merged_csv = merged_csv.rename(columns={'zone': 'zone_{}'.format(kind_of)})
@@ -97,11 +100,21 @@ def handle_ugliness(x):
         try:
             return float(x.replace(',', '.'))
         except ValueError:
-            return -1
+            return -1000
     else:
         if pd.isnull(x):
             return -1000  # Outside of the range of each feature.
         return x
+
+def remove_text(x):
+    """
+    Remove all text that occurs in CI_A16 and keep only the numbers.
+    """
+    x = "".join(d for d in x if d.isdigit())
+    if x:
+        return int(x)
+    else:
+        return -1000
 
 cols, exceptions = [], []
 
@@ -129,7 +142,9 @@ cols_hospi.extend(['CI_E4_V2', 'CI_E7_V2'])
 cols_hospi.extend(['CI_RH{}'.format(i) for i in range(1, 5)])
 # The categorical ones.
 exceptions_hospi = ['cat', 'taille_MCO', 'taille_C']
+exceptions_hospi.extend(['CI_A16_{}'.format(i) for i in range(1, 7)])
 cols_hospi.extend(exceptions_hospi)
+
 cols.append(cols_hospi)
 exceptions.append(exceptions_hospi)
 
