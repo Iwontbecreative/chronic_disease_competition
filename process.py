@@ -5,27 +5,24 @@ XGBOOST decides whether we use XGBoost gradient boosted trees.
 """
 
 from datetime import datetime
-import glob
-import pandas as pd
 import numpy as np
+import pandas as pd
 import xgboost as xgb
 from helper import output_csv, cv_split, one_vs_all, one_vs_previous
-# We use XGBoost's version of Gradient Boosting over SkLearn's one because of
-# the approximate tree building algorithm which is much faster with nearly no
-# performance loss.
-# See Section 3 of paper https://arxiv.org/pdf/1603.02754v3.pdf
+from helper import add_features, add_stack_features
+from columns import to_keep, to_keep_2015
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, ExtraTreesRegressor
 from sklearn.metrics import mean_squared_error
 
 LOCAL = True
 XGBOOST = False
-CV = 1
-CV_METHOD = cv_split
-USE_STACKED_FEATURES = True
-STACK = False
+CV = 6
+CV_METHOD = one_vs_all
+USE_STACKED_FEATURES = False
+STACK = True
 
 FOLDER = 'first_level' if STACK else 'run'
-FILENAME = 'XGBOOST_STD' if STACK else 'prediction'
+FILENAME = 'RFR_STD_50' if STACK else 'prediction'
 
 average_year = {
         2008: 0.1027,
@@ -37,67 +34,6 @@ average_year = {
         2014: 0.161,
         2015: 0.16,
         }
-
-
-
-def add_features(data):
-    """
-    Feature engineering other than cleaning data goes here.
-    """
-    data['pourc_ald'] = data.nombre_sej_ald / data.nombre_sej
-    data['diff_ald'] = data.nombre_sej - data.nombre_sej_ald
-    if 'CI_AC1' in data.columns and 'CI_AC4' in data.columns:
-        fillme = []
-        # Workaround to avoid division by zero.
-        for beds, rea_beds in zip(data.CI_AC1, data.CI_AC4):
-            fillme.append(rea_beds / beds if beds else 0)
-        data['part_lits_rea'] = fillme
-    return data
-
-def add_stack_features(data, kind):
-    """
-    Add stacked features to dataset `kind` € {'train', 'test'}
-    """
-    # We need to add the features in the right order.
-# FIXME: Code is ugly
-    features = [f for f in glob.glob('first_level/*.csv')]
-    features.sort()
-    for col in features:
-        if kind in col:
-            data[col.split(kind)[0]] = pd.read_csv(col, sep=';').cible
-    return data
-
-start = datetime.now()
-print('Started process at {:%H:%M:%S}'.format(start))
-
-# Columns to keep. Note that keeping 40+ columns will usually swap (on 4Gb ram)
-# using Random Forest Regressors or Gradient Boosted Trees.
-to_keep = ['eta', 'nom_eta', 'prov_patient', 'dom_acti', 'age',
-           'nombre_sej_ald', 'nombre_sej', 'an', 'label']
-# Extend with those that passed the treshold (> 0.1% contrib)
-to_keep.extend(['A9', 'A12', 'A13', 'A14', 'CI_AC1', 'CI_AC4',
-                'CI_AC6', 'CI_AC7', 'CI_RH4', 'CI_RH1', 'CI_RH3',
-                'CI_A5', 'CI_A12', 'CI_A15', 'P2', 'P13', 'P9',
-                'P12', 'P14', 'P15', 'A1bis', 'A2bis', 'A4bis',
-                'A5bis', 'cat'])
-to_keep.extend(['RH{}'.format(i) for i in range(2, 6)])
-
-to_keep_2015 = ['eta', 'nom_eta', 'prov_patient', 'dom_acti', 'age',
-                'nombre_sej_ald', 'nombre_sej', 'an', 'label']
-to_keep_2015.extend(['A1bis', 'A2bis', 'A4bis', 'A5bis', 'cat',
-                     'A9', 'A12', 'CI_A5', 'CI_A12', 'CI_A15', 'P2',
-                     'P13', 'P12', 'P15', 'CI_A16_6'])
-
-# data = pd.read_csv('proc_data.csv', usecols=to_keep)
-data = pd.read_csv('proc_data.csv', usecols=to_keep_2015)
-data.fillna(-1000, inplace=True)  # needed to handle pdmreg and pdmza
-data = add_features(data)
-
-if USE_STACKED_FEATURES:
-    data = add_stack_features(data, 'train')
-
-
-### ML Tuning ###
 
 if XGBOOST:
     param = {
@@ -111,9 +47,9 @@ if XGBOOST:
         'subsample': 0.85,
         'colsample_bytree': 0.85,
         'colsample_bylevel': 0.9,
-        # 'base_score': 0.14, Comment out since scores depend too much on
         'eta': 0.2,
     }
+
 else:
     # We don't use GBR because XGBoost is much faster and less memory-hungry.
     # clf = GradientBoostingRegressor(n_estimators=40, max_depth=13,
@@ -123,12 +59,25 @@ else:
     clf = RandomForestRegressor(n_estimators=50, random_state=1, n_jobs=4,
                                 max_features=7, bootstrap=False)
 
+
+
+start = datetime.now()
+print('Started process at {:%H:%M:%S}'.format(start))
+
+
+# data = pd.read_csv('proc_data.csv', usecols=to_keep)
+data = pd.read_csv('proc_data.csv', usecols=to_keep_2015)
+data.fillna(-1000, inplace=True)  # needed to handle pdmreg and pdmza
+data = add_features(data)
+
+if USE_STACKED_FEATURES:
+    data = add_stack_features(data, 'train')
+
+start_train = datetime.now()
+print('Started training at {:%H:%M:%S}'.format(start_train))
+
 if LOCAL:
-    start_train = datetime.now()
-    print('Started training at {:%H:%M:%S}'.format(start_train))
-    scores = []
-    f_i = []
-    stored_results = []
+    scores, f_i, stored_results = [], [], []
     for i in range(CV):
         print('CV round ', i)
         if i:
@@ -146,8 +95,6 @@ if LOCAL:
             clf.fit(Xtrain, ytrain)
             pred = clf.predict(Xtest)
             f_i.append(clf.feature_importances_*100)
-        # With GradientBoostedTrees, scores can be had even though y € [0, inf[
-        # Correct this by setting negative scores to 0.
         pred = [max(0, p) for p in pred]
         # We need to save the scores with the weights.
         if STACK:
@@ -174,8 +121,6 @@ if LOCAL:
 # We don't use else because STACK=True changes LOCAL to False
 # so that the first_levels are generated in one pass.
 if not LOCAL:
-    start_train = datetime.now()
-    print('Started training at {:%H:%M:%S}'.format(start_train))
     data_wo_label = data.loc[:, data.columns != 'label']
     if XGBOOST:
         xgb_train = xgb.DMatrix(data_wo_label, data.label)
@@ -185,7 +130,7 @@ if not LOCAL:
         clf.fit(data_wo_label, data.label)
         for col, imp in zip(data_wo_label, clf.feature_importances_*100):
             print(col, ':', imp)
-    print('Training took : {} seconds'.format(datetime.now()-start_train))
+    print('Training took : {}'.format(datetime.now()-start_train))
 
     # Ugly call to Garbage collector to work around ram limits.
     del data
@@ -200,7 +145,7 @@ if not LOCAL:
     if XGBOOST:
         test = xgb.DMatrix(test)
     ypred = clf.predict(test)
-    ypred = [max(0, p) for p, z in ypred]
+    ypred = [max(0, p) for p in ypred]
     print('Average prediction is :', sum(ypred)/len(ypred))
     output_csv(ypred, FOLDER, FILENAME + '_test', False)
 

@@ -1,3 +1,4 @@
+import glob
 import pandas as pd
 
 def output_csv(pred, folder, filename, time=True):
@@ -60,3 +61,31 @@ def one_vs_all(data, i):
     ytrain, ytest = Xtrain.label, Xtest.label
     mask = ~Xtrain.columns.isin(['label'])
     return Xtrain.loc[:, mask], Xtest.loc[:, mask], ytrain, ytest
+
+
+def add_features(data):
+    """
+    Feature engineering other than cleaning data goes here.
+    """
+    data['pourc_ald'] = data.nombre_sej_ald / data.nombre_sej
+    data['diff_ald'] = data.nombre_sej - data.nombre_sej_ald
+    if 'CI_AC1' in data.columns and 'CI_AC4' in data.columns:
+        fillme = []
+        # Workaround to avoid division by zero.
+        for beds, rea_beds in zip(data.CI_AC1, data.CI_AC4):
+            fillme.append(rea_beds / beds if beds else 0)
+        data['part_lits_rea'] = fillme
+    return data
+
+def add_stack_features(data, kind):
+    """
+    Add stacked features to dataset `kind` € {'train', 'test'}
+    """
+    # We need to add the features in the right order.
+    # FIXME: Code is ugly
+    features = [f for f in glob.glob('first_level/*.csv')]
+    features.sort()
+    for col in features:
+        if kind in col:
+            data[col.split(kind)[0]] = pd.read_csv(col, sep=';').cible
+    return data
