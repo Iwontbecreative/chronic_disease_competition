@@ -9,6 +9,7 @@ import glob
 import pandas as pd
 import numpy as np
 import xgboost as xgb
+from helper import output_csv, cv_split, one_vs_all, one_vs_previous
 # We use XGBoost's version of Gradient Boosting over SkLearn's one because of
 # the approximate tree building algorithm which is much faster with nearly no
 # performance loss.
@@ -19,82 +20,24 @@ from sklearn.metrics import mean_squared_error
 LOCAL = True
 XGBOOST = False
 CV = 1
-CV_METHOD = 'cv_split'
+CV_METHOD = cv_split
 USE_STACKED_FEATURES = True
 STACK = False
 
 FOLDER = 'first_level' if STACK else 'run'
 FILENAME = 'XGBOOST_STD' if STACK else 'prediction'
 
-average_year = {2008:0.1027,
-                2009: 0.1129,
-                2010: 0.1258,
-                2011: 0.1317,
-                2012: 0.1384,
-                2013: 0.1483,
-                2014: 0.161,
-                2015: 0.16}
+average_year = {
+        2008: 0.1027,
+        2009: 0.1129,
+        2010: 0.1258,
+        2011: 0.1317,
+        2012: 0.1384,
+        2013: 0.1483,
+        2014: 0.161,
+        2015: 0.16,
+        }
 
-def output_csv(pred, folder, filename, time=True):
-    pred = pd.Series(pred)
-    pred.index.name, pred.name = 'id', 'cible'
-    time_at = datetime.now() if time else ""
-    pred.to_csv('{folder}/{file}_{time}.csv'.format(folder=folder,
-                                                    file=filename,
-                                                    time=time_at), sep=';',
-                                                    header=True)
-
-### Splitting functions, used for cross_val ###
-
-# FIXME: Once the cross-validation methods will be settled, use
-# sklearn's StratifiedKFold instead. For now those 3 functions are ugly.
-
-
-def split(data, before=2012):
-    """
-    Small utility to split data based on years
-    """
-    mask = data.an < before
-    Xtrain, Xtest = data[mask], data[~mask]
-    ytrain, ytest = Xtrain.label, Xtest.label
-    mask = ~Xtrain.columns.isin(['label'])
-    return Xtrain.loc[:, mask], Xtest.loc[:, mask], ytrain, ytest
-
-
-def cv_split(data, i):
-    """
-    Returns 3 years of train, 2 years of test.
-    1) Train < 2012, Test = 2012-2013
-    2) Train > 2009, Test = 2008-2009
-    For this function we must have CV <= 2
-    """
-    if not i:
-        return split(data)
-    else:
-        a, b, c, d = split(data, before=2010)
-        return b, a, d, c
-
-
-def one_vs_previous(data, i, previous_years=2):
-    """
-    Predict one year according to the 'previous_years' years before.
-    For this function we must have CV <= 5-previous_years
-    """
-    year_to_test = 2008 + i + previous_years
-    year = data.an == year_to_test
-    previous = data.an.isin(np.arange(2008 + i, year_to_test))
-    Xtrain, Xtest = data[previous], data[year]
-    ytrain, ytest = Xtrain.label, Xtest.label
-    mask = ~Xtrain.columns.isin(['label'])
-    return Xtrain.loc[:, mask], Xtest.loc[:, mask], ytrain, ytest
-
-
-def one_vs_all(data, i):
-    mask = data.an != 2008 + i
-    Xtrain, Xtest = data[mask], data[~mask]
-    ytrain, ytest = Xtrain.label, Xtest.label
-    mask = ~Xtrain.columns.isin(['label'])
-    return Xtrain.loc[:, mask], Xtest.loc[:, mask], ytrain, ytest
 
 
 def add_features(data):
@@ -103,7 +46,6 @@ def add_features(data):
     """
     data['pourc_ald'] = data.nombre_sej_ald / data.nombre_sej
     data['diff_ald'] = data.nombre_sej - data.nombre_sej_ald
-    data['average_year'] = data.an.apply(lambda s: average_year[s])
     if 'CI_AC1' in data.columns and 'CI_AC4' in data.columns:
         fillme = []
         # Workaround to avoid division by zero.
@@ -189,15 +131,9 @@ if LOCAL:
     stored_results = []
     for i in range(CV):
         print('CV round ', i)
-        if CV_METHOD == 'cv_split':
-            splitter = cv_split
-        elif CV_METHOD == 'one_vs_all':
-            splitter = one_vs_all
-        else:
-            splitter = one_vs_previous
         if i:
             del Xtrain, Xtest
-        Xtrain, Xtest, ytrain, ytest = splitter(data, i)
+        Xtrain, Xtest, ytrain, ytest = CV_METHOD(data, i)
         if XGBOOST:
             xgb_train = xgb.DMatrix(Xtrain, ytrain)
             xgb_test = xgb.DMatrix(Xtest, ytest)
@@ -264,7 +200,7 @@ if not LOCAL:
     if XGBOOST:
         test = xgb.DMatrix(test)
     ypred = clf.predict(test)
-    ypred = [max(p, 0) for p in ypred]
+    ypred = [max(0, p) for p, z in ypred]
     print('Average prediction is :', sum(ypred)/len(ypred))
     output_csv(ypred, FOLDER, FILENAME + '_test', False)
 
