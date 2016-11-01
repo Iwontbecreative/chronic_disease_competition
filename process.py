@@ -16,10 +16,10 @@ from sklearn.metrics import mean_squared_error
 
 LOCAL = True
 XGBOOST = False
-CV = 6
-CV_METHOD = one_vs_all
+CV = 2
+CV_METHOD = cv_split
 USE_STACKED_FEATURES = False
-STACK = True
+STACK = False
 
 FOLDER = 'first_level' if STACK else 'run'
 FILENAME = 'RFR_STD_50' if STACK else 'prediction'
@@ -56,7 +56,7 @@ else:
                                     # max_features=7, verbose=1,
                                     # random_state=1)
     # Works best with 50.
-    clf = RandomForestRegressor(n_estimators=50, random_state=1, n_jobs=4,
+    clf = RandomForestRegressor(n_estimators=40, random_state=1, n_jobs=4,
                                 max_features=7, bootstrap=False)
 
 
@@ -65,8 +65,9 @@ start = datetime.now()
 print('Started process at {:%H:%M:%S}'.format(start))
 
 
-# data = pd.read_csv('proc_data.csv', usecols=to_keep)
 data = pd.read_csv('proc_data.csv', usecols=to_keep_2015)
+data.index = data.id
+data.drop(['id'], axis=1, inplace=True)
 data.fillna(-1000, inplace=True)  # needed to handle pdmreg and pdmza
 data = add_features(data)
 
@@ -95,7 +96,9 @@ if LOCAL:
             clf.fit(Xtrain, ytrain)
             pred = clf.predict(Xtest)
             f_i.append(clf.feature_importances_*100)
-        pred = [max(0, p) for p in pred]
+        # We'd rather work with pandas objects all the way.
+        pred = pd.Series(pred, index=Xtest.index)
+        pred = pred.apply(lambda p: max(0, p))
         # We need to save the scores with the weights.
         if STACK:
             stored_results.append(pd.Series(pred, ytest.index))
@@ -114,7 +117,7 @@ if LOCAL:
 
     if STACK:
         stacked = pd.concat(stored_results)
-        output_csv(stacked, FOLDER, FILENAME + '_train', False)
+        output_csv(stacked, FOLDER, FILENAME + '_train', True, False)
         LOCAL = False
 
 
@@ -139,14 +142,17 @@ if not LOCAL:
     to_keep.remove('label')
     to_keep_2015.remove('label')
     test = pd.read_csv('proc_test.csv', usecols=to_keep_2015)
+    test.index = test.id
+    test.drop(['id'], axis=1, inplace=True)
     test = add_features(test)
     if USE_STACKED_FEATURES:
         test = add_stack_features(test, 'test')
     if XGBOOST:
         test = xgb.DMatrix(test)
     ypred = clf.predict(test)
-    ypred = [max(0, p) for p in ypred]
+    ypred = pd.Series(ypred, index=test.index)
+    ypred = ypred.apply(lambda p: max(0, p))
     print('Average prediction is :', sum(ypred)/len(ypred))
-    output_csv(ypred, FOLDER, FILENAME + '_test', False)
+    output_csv(ypred, FOLDER, FILENAME + '_test', True, False)
 
 print('Total process took : {}'.format(datetime.now()-start))

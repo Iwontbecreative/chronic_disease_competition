@@ -1,14 +1,20 @@
 import glob
 import pandas as pd
+import numpy as np
 
-def output_csv(pred, folder, filename, time=True):
-    pred = pd.Series(pred)
-    pred.index.name, pred.name = 'id', 'cible'
+def output_csv(pred, folder, filename, test=True, time=True):
+    # Depending on the length we want different zero padding
+    magic = 664524 if test else 1879841
+    predictions = pd.Series(0, np.arange(magic))
+    predictions = pd.concat([predictions, pred], axis=1).drop(0, axis=1)
+    predictions.fillna(0, inplace=True)
+    predictions.index.name, predictions.columns = 'id', ['cible']
     time_at = datetime.now() if time else ""
-    pred.to_csv('{folder}/{file}_{time}.csv'.format(folder=folder,
-                                                    file=filename,
-                                                    time=time_at), sep=';',
-                                                    header=True)
+    predictions.to_csv('{folder}/{file}_{time}.csv'.format(folder=folder,
+                                                           file=filename,
+                                                           time=time_at),
+                                                           sep=';',
+                                                           header=True)
 
 ### Splitting functions, used for cross_val ###
 
@@ -67,8 +73,12 @@ def add_features(data):
     """
     Feature engineering other than cleaning data goes here.
     """
+    data.nombre_sej_ald = np.log1p(data.nombre_sej_ald)
+    data.nombre_sej = np.log1p(data.nombre_sej)
     data['pourc_ald'] = data.nombre_sej_ald / data.nombre_sej
     data['diff_ald'] = data.nombre_sej - data.nombre_sej_ald
+    dept_code = data.eta.apply(lambda s: int(str(s)[:2]))
+    data['prov_egal_lieu'] = [int(i) for i in data.prov_patient == dept_code]
     if 'CI_AC1' in data.columns and 'CI_AC4' in data.columns:
         fillme = []
         # Workaround to avoid division by zero.

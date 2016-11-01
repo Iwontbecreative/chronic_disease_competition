@@ -176,14 +176,19 @@ for source in sources:
     # Test data has one more col, id, remove it.
     if is_test:
         data.drop(['id'], axis=1, inplace=True)
+    data['id'] = data.index
 
     columns = ['eta', 'nom_eta', 'prov_patient', 'dom_acti', 'age',
                'nombre_sej_ald', 'nombre_sej', 'an']
-
     if not is_test:
         columns.append('label')
+    columns.append('id')
 
     data.columns = columns
+
+    # Only keep lines where we actually want to predict
+    # When nombre_sej_ald is 0, label will be 0 so we predict 0.
+    data = data[data.nombre_sej_ald > 0]
 
     # Data munging and cleaning for chronic disease reports
     # We only change eta after merging as it is one of the columns to join on.
