@@ -1,0 +1,9 @@
+.ipynb_checkpoints/
+__pycache__/
+*.swp
+run/
+first_level/
+hospidiag/
+hospidiag_excel/
+*.csv
+test.zip
