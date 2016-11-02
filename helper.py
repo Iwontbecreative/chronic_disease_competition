@@ -73,19 +73,31 @@ def add_features(data):
     """
     Feature engineering other than cleaning data goes here.
     """
+    dept_code = data.eta.apply(retrieve_dept_code)
+    data['dept_code'] = dept_code
+    data['prov_egal_lieu'] = [int(i) for i in data.prov_patient == dept_code]
+    # log transforms.
     data.nombre_sej_ald = np.log1p(data.nombre_sej_ald)
     data.nombre_sej = np.log1p(data.nombre_sej)
     data['pourc_ald'] = data.nombre_sej_ald / data.nombre_sej
     data['diff_ald'] = data.nombre_sej - data.nombre_sej_ald
-    dept_code = data.eta.apply(lambda s: int(str(s)[:2]))
-    data['prov_egal_lieu'] = [int(i) for i in data.prov_patient == dept_code]
-    if 'CI_AC1' in data.columns and 'CI_AC4' in data.columns:
-        fillme = []
-        # Workaround to avoid division by zero.
-        for beds, rea_beds in zip(data.CI_AC1, data.CI_AC4):
-            fillme.append(rea_beds / beds if beds else 0)
-        data['part_lits_rea'] = fillme
+
+    # naive bayes
+    mean_val, benchmark = {}, {}
+    for nom_eta in data.nom_eta.unique():
+        masked = data[data.nom_eta == nom_eta]
+        mean_val[nom_eta] = masked.label.mean()
+        ln2 = np.log(2)
+        benchmark[nom_eta] = masked[(masked.nombre_sej == ln2) & (masked.nombre_sej_ald == ln2)].label.mean()
+    data['bayes_nom_eta'] = data.nom_eta.apply(lambda e: mean_val[e])
+    data.bayes_nom_eta.fillna(-1, inplace=True)
+    data['bayes_benchmark'] = data.nom_eta.apply(lambda e: benchmark[e])
+    data.bayes_benchmark.fillna(-1, inplace=True)
+
     return data
+
+def retrieve_dept_code(s):
+    return s // 10**7
 
 def add_stack_features(data, kind):
     """

@@ -6,7 +6,6 @@ Columns to keep in the algorithm
 # using Random Forest Regressors or Gradient Boosted Trees.
 to_keep = ['eta', 'nom_eta', 'prov_patient', 'dom_acti', 'age',
            'nombre_sej_ald', 'nombre_sej', 'an', 'id', 'label']
-# Extend with those that passed the treshold (> 0.1% contrib)
 to_keep.extend(['A9', 'A12', 'A13', 'A14', 'CI_AC1',
                 'CI_AC6', 'CI_RH4', 'CI_RH1', 'CI_RH3',
                 'CI_A5', 'CI_A12', 'CI_A15', 'P2', 'P13', 'P9',
@@ -18,4 +17,4 @@ to_keep_2015 = ['eta', 'nom_eta', 'prov_patient', 'dom_acti', 'age',
                 'nombre_sej_ald', 'nombre_sej', 'an', 'id', 'label']
 to_keep_2015.extend(['A1bis', 'A2bis', 'A4bis', 'A5bis', 'cat',
                      'A9', 'A12', 'CI_A5', 'CI_A12', 'CI_A15', 'P2',
-                     'P13', 'P12', 'P15', 'CI_A16_6'])
+                     'P13', 'P12', 'CI_A16_6'])

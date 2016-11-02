@@ -11,7 +11,8 @@ import xgboost as xgb
 from helper import output_csv, cv_split, one_vs_all, one_vs_previous
 from helper import add_features, add_stack_features
 from columns import to_keep, to_keep_2015
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, ExtraTreesRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.metrics import mean_squared_error
 
 LOCAL = True
@@ -58,8 +59,6 @@ else:
     # Works best with 50.
     clf = RandomForestRegressor(n_estimators=40, random_state=1, n_jobs=4,
                                 max_features=7, bootstrap=False)
-
-
 
 start = datetime.now()
 print('Started process at {:%H:%M:%S}'.format(start))
