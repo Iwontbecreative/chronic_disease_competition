@@ -9,14 +9,14 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 from helper import output_csv, cv_split, one_vs_all, one_vs_previous
-from helper import add_features, add_stack_features
+from helper import add_features, add_stack_features, naive_bayes
 from columns import to_keep, to_keep_2015
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.metrics import mean_squared_error
 
-LOCAL = True
-XGBOOST = False
+LOCAL = False
+XGBOOST = True
 CV = 2
 CV_METHOD = cv_split
 USE_STACKED_FEATURES = False
@@ -57,7 +57,7 @@ else:
                                     # max_features=7, verbose=1,
                                     # random_state=1)
     # Works best with 50.
-    clf = RandomForestRegressor(n_estimators=40, random_state=1, n_jobs=4,
+    clf = RandomForestRegressor(n_estimators=50, random_state=1, n_jobs=4,
                                 max_features=7, bootstrap=False)
 
 start = datetime.now()
@@ -67,8 +67,10 @@ print('Started process at {:%H:%M:%S}'.format(start))
 data = pd.read_csv('proc_data.csv', usecols=to_keep_2015)
 data.index = data.id
 data.drop(['id'], axis=1, inplace=True)
+# Add naive bayes.
+mean_val, benchmark = naive_bayes(data)
 data.fillna(-1000, inplace=True)  # needed to handle pdmreg and pdmza
-data = add_features(data)
+data = add_features(data, mean_val, benchmark)
 
 if USE_STACKED_FEATURES:
     data = add_stack_features(data, 'train')
@@ -126,7 +128,7 @@ if not LOCAL:
     data_wo_label = data.loc[:, data.columns != 'label']
     if XGBOOST:
         xgb_train = xgb.DMatrix(data_wo_label, data.label)
-        clf = xgb.train(param, xgb_train, num_boost_round=70,
+        clf = xgb.train(param, xgb_train, num_boost_round=20,
                         verbose_eval=1, evals=[(xgb_train, 'Train')])
     else:
         clf.fit(data_wo_label, data.label)
@@ -143,13 +145,15 @@ if not LOCAL:
     test = pd.read_csv('proc_test.csv', usecols=to_keep_2015)
     test.index = test.id
     test.drop(['id'], axis=1, inplace=True)
-    test = add_features(test)
+    test = add_features(test, mean_val, benchmark)
     if USE_STACKED_FEATURES:
         test = add_stack_features(test, 'test')
     if XGBOOST:
+        indexer = test.index
         test = xgb.DMatrix(test)
     ypred = clf.predict(test)
-    ypred = pd.Series(ypred, index=test.index)
+    indexer = indexer if XGBOOST else test.index
+    ypred = pd.Series(ypred, index=indexer)
     ypred = ypred.apply(lambda p: max(0, p))
     print('Average prediction is :', sum(ypred)/len(ypred))
     output_csv(ypred, FOLDER, FILENAME + '_test', True, False)

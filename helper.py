@@ -2,6 +2,7 @@ import glob
 import pandas as pd
 import numpy as np
 
+
 def output_csv(pred, folder, filename, test=True, time=True):
     # Depending on the length we want different zero padding
     magic = 664524 if test else 1879841
@@ -16,7 +17,7 @@ def output_csv(pred, folder, filename, test=True, time=True):
                                                            sep=';',
                                                            header=True)
 
-### Splitting functions, used for cross_val ###
+# Splitting functions, used for cross_val
 
 # FIXME: Once the cross-validation methods will be settled, use
 # sklearn's StratifiedKFold instead. For now those 3 functions are ugly.
@@ -69,13 +70,23 @@ def one_vs_all(data, i):
     return Xtrain.loc[:, mask], Xtest.loc[:, mask], ytrain, ytest
 
 
-def add_features(data):
+def naive_bayes(data):
+    mean_val, benchmark = {}, {}
+    for nom_eta in data.nom_eta.unique():
+        masked = data[data.nom_eta == nom_eta]
+        mean_val[nom_eta] = masked.label.mean()
+        benchmark[nom_eta] = masked[(masked.nombre_sej == 1) & (masked.nombre_sej_ald == 1)].label.mean()
+    return mean_val, benchmark
+
+
+def add_features(data, mean_val, benchmark):
     """
     Feature engineering other than cleaning data goes here.
     """
     dept_code = data.eta.apply(retrieve_dept_code)
     data['dept_code'] = dept_code
     data['prov_egal_lieu'] = [int(i) for i in data.prov_patient == dept_code]
+
     # log transforms.
     data.nombre_sej_ald = np.log1p(data.nombre_sej_ald)
     data.nombre_sej = np.log1p(data.nombre_sej)
@@ -83,21 +94,15 @@ def add_features(data):
     data['diff_ald'] = data.nombre_sej - data.nombre_sej_ald
 
     # naive bayes
-    mean_val, benchmark = {}, {}
-    for nom_eta in data.nom_eta.unique():
-        masked = data[data.nom_eta == nom_eta]
-        mean_val[nom_eta] = masked.label.mean()
-        ln2 = np.log(2)
-        benchmark[nom_eta] = masked[(masked.nombre_sej == ln2) & (masked.nombre_sej_ald == ln2)].label.mean()
-    data['bayes_nom_eta'] = data.nom_eta.apply(lambda e: mean_val[e])
-    data.bayes_nom_eta.fillna(-1, inplace=True)
-    data['bayes_benchmark'] = data.nom_eta.apply(lambda e: benchmark[e])
+    data['bayes_nom_eta'] = data.nom_eta.apply(lambda e: mean_val.get(e, -1))
+    data['bayes_benchmark'] = data.nom_eta.apply(lambda e: benchmark.get(e, -1))
     data.bayes_benchmark.fillna(-1, inplace=True)
-
     return data
+
 
 def retrieve_dept_code(s):
     return s // 10**7
+
 
 def add_stack_features(data, kind):
     """
