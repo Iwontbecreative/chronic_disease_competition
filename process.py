@@ -9,31 +9,31 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 from helper import output_csv, cv_split, one_vs_all, one_vs_previous
-from helper import add_features, add_stack_features, naive_bayes
+from helper import add_features, add_stack_features, naive_bayes, stack_csv
 from columns import to_keep, to_keep_2015
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.metrics import mean_squared_error
 
-LOCAL = False
-XGBOOST = True
-CV = 2
+LOCAL = True
+XGBOOST = False
+CV = 1
 CV_METHOD = cv_split
 USE_STACKED_FEATURES = False
 STACK = False
 
 FOLDER = 'first_level' if STACK else 'run'
-FILENAME = 'RFR_STD_50' if STACK else 'prediction'
+FILENAME = 'ETR_40' if STACK else 'prediction'
 
 average_year = {
-        2008: 0.1027,
-        2009: 0.1129,
-        2010: 0.1258,
-        2011: 0.1317,
-        2012: 0.1384,
-        2013: 0.1483,
-        2014: 0.161,
-        2015: 0.16,
+        2008: 0.2306,
+        2009: 0.2513,
+        2010: 0.2762,
+        2011: 0.2879,
+        2012: 0.2999,
+        2013: 0.315,
+        # 2014: 0.161,
+        # 2015: 0.16,
         }
 
 if XGBOOST:
@@ -45,7 +45,7 @@ if XGBOOST:
         'nthread': 4,
         'eval_metric': 'rmse',
         'seed': 1,
-        'subsample': 0.85,
+        'subsample': 0.90,
         'colsample_bytree': 0.85,
         'colsample_bylevel': 0.9,
         'eta': 0.2,
@@ -53,18 +53,18 @@ if XGBOOST:
 
 else:
     # We don't use GBR because XGBoost is much faster and less memory-hungry.
-    # clf = GradientBoostingRegressor(n_estimators=40, max_depth=13,
+    # clf = GradientBoostingRegressor(n_estimators=20, max_depth=13,
                                     # max_features=7, verbose=1,
                                     # random_state=1)
     # Works best with 50.
-    clf = RandomForestRegressor(n_estimators=50, random_state=1, n_jobs=4,
+    clf = RandomForestRegressor(n_estimators=40, random_state=1, n_jobs=4,
                                 max_features=7, bootstrap=False)
 
 start = datetime.now()
 print('Started process at {:%H:%M:%S}'.format(start))
 
 
-data = pd.read_csv('proc_data.csv', usecols=to_keep_2015)
+data = pd.read_csv('proc_data.csv', usecols=to_keep)
 data.index = data.id
 data.drop(['id'], axis=1, inplace=True)
 # Add naive bayes.
@@ -80,6 +80,7 @@ print('Started training at {:%H:%M:%S}'.format(start_train))
 
 if LOCAL:
     scores, f_i, stored_results = [], [], []
+    data.drop(['eta', 'nom_eta'], axis=1, inplace=True)
     for i in range(CV):
         print('CV round ', i)
         if i:
@@ -99,6 +100,9 @@ if LOCAL:
             f_i.append(clf.feature_importances_*100)
         # We'd rather work with pandas objects all the way.
         pred = pd.Series(pred, index=Xtest.index)
+        mean = pred.mean()
+        print('Score before scaling', mean_squared_error(ytest, pred)**0.5*100)
+        # pred = pred.apply(lambda p: p*(average_year[2013]/mean))
         pred = pred.apply(lambda p: max(0, p))
         # We need to save the scores with the weights.
         if STACK:
@@ -118,7 +122,7 @@ if LOCAL:
 
     if STACK:
         stacked = pd.concat(stored_results)
-        output_csv(stacked, FOLDER, FILENAME + '_train', True, False)
+        stack_csv(stacked, FOLDER, FILENAME + '_train', True, False)
         LOCAL = False
 
 
@@ -155,7 +159,10 @@ if not LOCAL:
     indexer = indexer if XGBOOST else test.index
     ypred = pd.Series(ypred, index=indexer)
     ypred = ypred.apply(lambda p: max(0, p))
-    print('Average prediction is :', sum(ypred)/len(ypred))
-    output_csv(ypred, FOLDER, FILENAME + '_test', True, False)
+    print('Average prediction is :', ypred.mean())
+    if STACK:
+        stack_csv(ypred, FOLDER, FILENAME + '_test', True, False)
+    else:
+        output_csv(ypred, FOLDER, FILENAME + '_test', True, False)
 
 print('Total process took : {}'.format(datetime.now()-start))
