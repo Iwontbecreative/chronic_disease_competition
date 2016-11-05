@@ -1,6 +1,7 @@
 import glob
 import pandas as pd
 import numpy as np
+from datetime import datetime
 
 
 def output_csv(pred, folder, filename, test=True, time=True):
@@ -17,13 +18,18 @@ def output_csv(pred, folder, filename, test=True, time=True):
                                                            sep=';',
                                                            header=True)
 
+def stack_csv(pred, folder, filename, test=True, time=True):
+    time_at = datetime.now() if time else ""
+    pred.index.name, pred.name = 'id', 'cible'
+    pred.to_csv('{folder}/{file}_{time}.csv'.format(folder=folder,
+                                                           file=filename,
+                                                           time=time_at),
+                                                           sep=';',
+                                                           header=True)
+
 # Splitting functions, used for cross_val
 
-# FIXME: Once the cross-validation methods will be settled, use
-# sklearn's StratifiedKFold instead. For now those 3 functions are ugly.
-
-
-def split(data, before=2012):
+def split(data, before=2013):
     """
     Small utility to split data based on years
     """
@@ -71,12 +77,39 @@ def one_vs_all(data, i):
 
 
 def naive_bayes(data):
-    mean_val, benchmark = {}, {}
+    data = data[data.an < 2012]
+    mean_val, eta_benchmark = {}, {}
+    global_bench = benchmark(data)
     for nom_eta in data.nom_eta.unique():
         masked = data[data.nom_eta == nom_eta]
         mean_val[nom_eta] = masked.label.mean()
-        benchmark[nom_eta] = masked[(masked.nombre_sej == 1) & (masked.nombre_sej_ald == 1)].label.mean()
-    return mean_val, benchmark
+        result_benchmark = compare_to_benchmark(masked, global_bench)
+        l = len(result_benchmark)
+        eta_benchmark[nom_eta] = sum(result_benchmark)/l
+    return mean_val, eta_benchmark
+
+
+def benchmark(data):
+    benchmark = {}
+    for i in range(1, 7):
+        for j in range(i, 7):
+            mask = (data.nombre_sej_ald == i) & (data.nombre_sej == j)
+            benchmark['{}{}'.format(i, j)] = data[mask].label.mean()
+    return benchmark
+
+
+
+def compare_to_benchmark(eta, global_bench):
+    scores = []
+    for i in range(1, 7):
+        for j in range(i, 7):
+            mask = (eta.nombre_sej_ald == i) & (eta.nombre_sej == j)
+            val = eta[mask].label.mean()
+            if val:
+                scores.append(val - global_bench['{}{}'.format(i, j)])
+    if not scores:
+        scores.append(-1000)
+    return scores
 
 
 def add_features(data, mean_val, benchmark):
@@ -88,6 +121,8 @@ def add_features(data, mean_val, benchmark):
     data['prov_egal_lieu'] = [int(i) for i in data.prov_patient == dept_code]
 
     # log transforms.
+    data['real_nombre_sej_ald'] = data.nombre_sej_ald
+    data['real_nombre_sej'] = data.nombre_sej
     data.nombre_sej_ald = np.log1p(data.nombre_sej_ald)
     data.nombre_sej = np.log1p(data.nombre_sej)
     data['pourc_ald'] = data.nombre_sej_ald / data.nombre_sej
@@ -96,7 +131,7 @@ def add_features(data, mean_val, benchmark):
     # naive bayes
     data['bayes_nom_eta'] = data.nom_eta.apply(lambda e: mean_val.get(e, -1))
     data['bayes_benchmark'] = data.nom_eta.apply(lambda e: benchmark.get(e, -1))
-    data.bayes_benchmark.fillna(-1, inplace=True)
+    data['bayes_benchmark'].fillna(-1, inplace=True)
     return data
 
 
@@ -114,5 +149,6 @@ def add_stack_features(data, kind):
     features.sort()
     for col in features:
         if kind in col:
-            data[col.split(kind)[0]] = pd.read_csv(col, sep=';').cible
+            content = list(pd.read_csv(col, sep=';').cible)
+            data[col.split(kind)[0]] = content
     return data

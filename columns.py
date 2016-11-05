@@ -18,3 +18,5 @@ to_keep_2015 = ['eta', 'nom_eta', 'prov_patient', 'dom_acti', 'age',
 to_keep_2015.extend(['A1bis', 'A2bis', 'A4bis', 'A5bis', 'cat',
                      'A9', 'A12', 'CI_A5', 'CI_A12', 'CI_A15', 'P2',
                      'P13', 'P12', 'CI_A16_6'])
+
+to_keep_lr = ['nombre_sej_ald', 'nombre_sej', 'an', 'id', 'label']
