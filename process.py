@@ -14,16 +14,21 @@ from columns import to_keep, to_keep_2015
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.metrics import mean_squared_error
+from matplotlib import pyplot as plt
 
-LOCAL = True
-XGBOOST = False
+LOCAL = False
+XGBOOST = True
 CV = 1
 CV_METHOD = cv_split
-USE_STACKED_FEATURES = False
+USE_STACKED_FEATURES = True
 STACK = False
 
 FOLDER = 'first_level' if STACK else 'run'
-FILENAME = 'ETR_40' if STACK else 'prediction'
+FILENAME = 'ETR_40' if STACK else 'prediction_XGB'
+
+drop_stack = ['prov_patient', 'dom_acti', 'age', 'CI_A15', 'A5bis',
+              'eta', 'nom_eta', 'dept_code', 'prov_egal_lieu', 'nombre_sej',
+              'nombre_sej_ald', 'CI_A12', 'CI_A16_6', 'P12']
 
 average_year = {
         2008: 0.2306,
@@ -39,7 +44,7 @@ average_year = {
 if XGBOOST:
     param = {
         'booster': 'gbtree',
-        'max_depth': 20,
+        'max_depth': 3,
         'objective': 'reg:linear',
         'silent': 1,
         'nthread': 4,
@@ -48,7 +53,7 @@ if XGBOOST:
         'subsample': 0.90,
         'colsample_bytree': 0.85,
         'colsample_bylevel': 0.9,
-        'eta': 0.2,
+        'eta': 0.1,
     }
 
 else:
@@ -57,30 +62,32 @@ else:
                                     # max_features=7, verbose=1,
                                     # random_state=1)
     # Works best with 50.
-    clf = RandomForestRegressor(n_estimators=40, random_state=1, n_jobs=4,
-                                max_features=7, bootstrap=False)
+    clf = RandomForestRegressor(n_estimators=50, n_jobs=4, min_samples_split=9,
+                                max_features=7, bootstrap=False,
+                                max_depth=7)
 
 start = datetime.now()
 print('Started process at {:%H:%M:%S}'.format(start))
 
 
-data = pd.read_csv('proc_data.csv', usecols=to_keep)
+data = pd.read_csv('proc_data.csv', usecols=to_keep_2015)
 data.index = data.id
 data.drop(['id'], axis=1, inplace=True)
 # Add naive bayes.
-mean_val, benchmark = naive_bayes(data)
+# mean_val, benchmark = naive_bayes(data)
 data.fillna(-1000, inplace=True)  # needed to handle pdmreg and pdmza
-data = add_features(data, mean_val, benchmark)
+# data = add_features(data, mean_val, benchmark)
+data = add_features(data)
 
 if USE_STACKED_FEATURES:
     data = add_stack_features(data, 'train')
+    data.drop(drop_stack, axis=1, inplace=True)
 
 start_train = datetime.now()
 print('Started training at {:%H:%M:%S}'.format(start_train))
 
 if LOCAL:
     scores, f_i, stored_results = [], [], []
-    data.drop(['eta', 'nom_eta'], axis=1, inplace=True)
     for i in range(CV):
         print('CV round ', i)
         if i:
@@ -91,8 +98,10 @@ if LOCAL:
             xgb_test = xgb.DMatrix(Xtest, ytest)
             eval = [(xgb_train, 'Train'), (xgb_test, 'Test')]
             clf = xgb.train(param, xgb_train, num_boost_round=80,
-                            evals=eval, verbose_eval=1,
+                            evals=eval, verbose_eval=5,
                             early_stopping_rounds=3)
+            # xgb.plot_importance(clf)
+            # plt.show()
             pred = clf.predict(xgb_test)
         else:
             clf.fit(Xtrain, ytrain)
@@ -102,7 +111,7 @@ if LOCAL:
         pred = pd.Series(pred, index=Xtest.index)
         mean = pred.mean()
         print('Score before scaling', mean_squared_error(ytest, pred)**0.5*100)
-        # pred = pred.apply(lambda p: p*(average_year[2013]/mean))
+        pred = pred.apply(lambda p: p*(average_year[2012]/mean))
         pred = pred.apply(lambda p: max(0, p))
         # We need to save the scores with the weights.
         if STACK:
@@ -115,10 +124,10 @@ if LOCAL:
     for i, j in enumerate(scores):
         print('Score {} : {}'.format(i, j))
 
-    if not XGBOOST:
-        print('Mean feature importances were :')
-        for col, imp in zip(Xtrain.columns, sum(f_i)/len(f_i)):
-            print(col, ':', imp)
+    # if not XGBOOST:
+        # print('Mean feature importances were :')
+        # for col, imp in zip(Xtrain.columns, sum(f_i)/len(f_i)):
+            # print(col, ':', imp)
 
     if STACK:
         stacked = pd.concat(stored_results)
@@ -132,7 +141,7 @@ if not LOCAL:
     data_wo_label = data.loc[:, data.columns != 'label']
     if XGBOOST:
         xgb_train = xgb.DMatrix(data_wo_label, data.label)
-        clf = xgb.train(param, xgb_train, num_boost_round=20,
+        clf = xgb.train(param, xgb_train, num_boost_round=65,
                         verbose_eval=1, evals=[(xgb_train, 'Train')])
     else:
         clf.fit(data_wo_label, data.label)
@@ -149,9 +158,11 @@ if not LOCAL:
     test = pd.read_csv('proc_test.csv', usecols=to_keep_2015)
     test.index = test.id
     test.drop(['id'], axis=1, inplace=True)
-    test = add_features(test, mean_val, benchmark)
+    # test = add_features(test, mean_val, benchmark)
+    test = add_features(test)
     if USE_STACKED_FEATURES:
         test = add_stack_features(test, 'test')
+        test.drop(drop_stack, axis=1, inplace=True)
     if XGBOOST:
         indexer = test.index
         test = xgb.DMatrix(test)

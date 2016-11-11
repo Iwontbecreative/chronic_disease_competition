@@ -29,10 +29,11 @@ def stack_csv(pred, folder, filename, test=True, time=True):
 
 # Splitting functions, used for cross_val
 
-def split(data, before=2013):
+def split(data, before=2012):
     """
     Small utility to split data based on years
     """
+    data = data[data.an < 2013]
     mask = data.an < before
     Xtrain, Xtest = data[mask], data[~mask]
     ytrain, ytest = Xtrain.label, Xtest.label
@@ -112,7 +113,8 @@ def compare_to_benchmark(eta, global_bench):
     return scores
 
 
-def add_features(data, mean_val, benchmark):
+# def add_features(data, mean_val, benchmark):
+def add_features(data):
     """
     Feature engineering other than cleaning data goes here.
     """
@@ -121,17 +123,24 @@ def add_features(data, mean_val, benchmark):
     data['prov_egal_lieu'] = [int(i) for i in data.prov_patient == dept_code]
 
     # log transforms.
-    data['real_nombre_sej_ald'] = data.nombre_sej_ald
-    data['real_nombre_sej'] = data.nombre_sej
+    # data['real_nombre_sej_ald'] = data.nombre_sej_ald
+    # data['real_nombre_sej'] = data.nombre_sej
     data.nombre_sej_ald = np.log1p(data.nombre_sej_ald)
     data.nombre_sej = np.log1p(data.nombre_sej)
     data['pourc_ald'] = data.nombre_sej_ald / data.nombre_sej
     data['diff_ald'] = data.nombre_sej - data.nombre_sej_ald
 
+    # Indicators of positiveness.
+    # data['I_A1bis'] = data.A1bis.apply(lambda i: i>0)
+    # data['I_A2bis'] = data.A2bis.apply(lambda i: i>0)
+    # data['I_A4bis'] = data.A4bis.apply(lambda i: i>0)
+    # data['I_A5bis'] = data.A5bis.apply(lambda i: i>0)
+    # data['I_A12'] = data.A12.apply(lambda i: i>0)
+
     # naive bayes
-    data['bayes_nom_eta'] = data.nom_eta.apply(lambda e: mean_val.get(e, -1))
-    data['bayes_benchmark'] = data.nom_eta.apply(lambda e: benchmark.get(e, -1))
-    data['bayes_benchmark'].fillna(-1, inplace=True)
+    # data['bayes_nom_eta'] = data.nom_eta.apply(lambda e: mean_val.get(e, -1))
+    # data['bayes_benchmark'] = data.nom_eta.apply(lambda e: benchmark.get(e, -1))
+    # data['bayes_benchmark'].fillna(-1, inplace=True)
     return data
 
 
@@ -149,6 +158,10 @@ def add_stack_features(data, kind):
     features.sort()
     for col in features:
         if kind in col:
-            content = list(pd.read_csv(col, sep=';').cible)
-            data[col.split(kind)[0]] = content
+            content = pd.read_csv(col, sep=';').cible.copy()
+            data[col.split(kind)[0]+'std'] = list(content)
+            content.sort_values(inplace=True)
+            content.iloc[:] = np.arange(len(content))/len(content)
+            content = content.sort_index()
+            data[col.split(kind)[0]] = list(content)
     return data

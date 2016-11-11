@@ -16,7 +16,10 @@ to_keep.extend(['RH{}'.format(i) for i in range(2, 6)])
 to_keep_2015 = ['eta', 'nom_eta', 'prov_patient', 'dom_acti', 'age',
                 'nombre_sej_ald', 'nombre_sej', 'an', 'id', 'label']
 to_keep_2015.extend(['A1bis', 'A2bis', 'A4bis', 'A5bis', 'cat',
-                     'A9', 'A12', 'CI_A5', 'CI_A12', 'CI_A15', 'P2',
+                     'A9', 'A12', 'CI_A1', 'CI_A2', 'CI_A4', 'CI_A5',
+                     'CI_A12',
+                     'CI_A15', 'P2',
                      'P13', 'P12', 'CI_A16_6'])
 
 to_keep_lr = ['nombre_sej_ald', 'nombre_sej', 'an', 'id', 'label']
+
