@@ -16,19 +16,19 @@ from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.metrics import mean_squared_error
 from matplotlib import pyplot as plt
 
-LOCAL = False
+LOCAL = True
 XGBOOST = True
 CV = 1
 CV_METHOD = cv_split
-USE_STACKED_FEATURES = True
+USE_STACKED_FEATURES = False
 STACK = False
 
 FOLDER = 'first_level' if STACK else 'run'
-FILENAME = 'ETR_40' if STACK else 'prediction_XGB'
+FILENAME = 'RFR_50_previous' if STACK else 'prediction_XGB_to_keep'
 
-drop_stack = ['prov_patient', 'dom_acti', 'age', 'CI_A15', 'A5bis',
-              'eta', 'nom_eta', 'dept_code', 'prov_egal_lieu', 'nombre_sej',
-              'nombre_sej_ald', 'CI_A12', 'CI_A16_6', 'P12']
+drop_stack = ['prov_patient', 'dom_acti', 'CI_A15', 'A5bis',
+              'eta', 'nom_eta', 'dept_code', 'prov_egal_lieu',
+              'CI_A12', 'CI_A16_6', 'P12', 'CI_A5', 'A4bis']
 
 average_year = {
         2008: 0.2306,
@@ -50,19 +50,18 @@ if XGBOOST:
         'nthread': 4,
         'eval_metric': 'rmse',
         'seed': 1,
-        'subsample': 0.90,
-        'colsample_bytree': 0.85,
-        'colsample_bylevel': 0.9,
+        'subsample': 1,
+        'colsample_bytree': 1,
+        'colsample_bylevel': 1,
         'eta': 0.1,
     }
 
 else:
     # We don't use GBR because XGBoost is much faster and less memory-hungry.
-    # clf = GradientBoostingRegressor(n_estimators=20, max_depth=13,
-                                    # max_features=7, verbose=1,
-                                    # random_state=1)
+    # clf = GradientBoostingRegressor(n_estimators=50, max_depth=5,
+                                    # max_features=7, verbose=1)
     # Works best with 50.
-    clf = RandomForestRegressor(n_estimators=50, n_jobs=4, min_samples_split=9,
+    clf = RandomForestRegressor(n_estimators=50, n_jobs=4, min_samples_split=5,
                                 max_features=7, bootstrap=False,
                                 max_depth=7)
 
@@ -100,8 +99,8 @@ if LOCAL:
             clf = xgb.train(param, xgb_train, num_boost_round=80,
                             evals=eval, verbose_eval=5,
                             early_stopping_rounds=3)
-            # xgb.plot_importance(clf)
-            # plt.show()
+            xgb.plot_importance(clf)
+            plt.show()
             pred = clf.predict(xgb_test)
         else:
             clf.fit(Xtrain, ytrain)
@@ -111,7 +110,8 @@ if LOCAL:
         pred = pd.Series(pred, index=Xtest.index)
         mean = pred.mean()
         print('Score before scaling', mean_squared_error(ytest, pred)**0.5*100)
-        pred = pred.apply(lambda p: p*(average_year[2012]/mean))
+        # Scale if we are working with just one year.
+        # pred = pred.apply(lambda p: p*(average_year[2012]/mean))
         pred = pred.apply(lambda p: max(0, p))
         # We need to save the scores with the weights.
         if STACK:

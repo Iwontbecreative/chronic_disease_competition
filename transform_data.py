@@ -130,19 +130,21 @@ cols, exceptions = [], []
 
 ##### HOSPIDIAG #####
 cols_hospi = ['finess']
-cols_hospi.extend(['A9', 'A12', 'A13', 'A14'])
-cols_hospi.extend(['P2', 'P9', 'P12', 'P13', 'P14', 'P15'])
-cols_hospi.extend(['RH{}'.format(i) for i in (2, 3, 4, 5)])
+cols_hospi.extend(['A8', 'A9', 'A12', 'A13', 'A14'])
+cols_hospi.extend(['P1', 'P2', 'P9', 'P12', 'P13', 'P14', 'P15'])
+cols_hospi.extend(['RH{}'.format(i) for i in (2, 3, 4, 5, 6)])
 cols_hospi.extend(['CI_AC{}'.format(i) for i in (1, 4, 6, 7)])
-cols_hospi.extend(['CI_A{}'.format(i) for i in (2, 5, 7, 8, 12, 15)])
+cols_hospi.extend(['CI_A{}'.format(i) for i in (1, 2, 4, 5, 7, 8, 12, 15)])
 cols_hospi.extend(['CI_E{}'.format(i) for i in range(1, 8)])
 cols_hospi.extend(['CI_DF{}'.format(i) for i in range(1, 6)])
-cols_hospi.extend(['Q{}'.format(i) for i in range(1, 12)])
 cols_hospi.extend(['CI_E4_V2', 'CI_E7_V2'])
 cols_hospi.extend(['CI_RH{}'.format(i) for i in range(1, 5)])
+cols_hospi.extend(['F{}_D'.format(i) for i in range(1, 13)])
+cols_hospi.extend(['F{}_O'.format(i) for i in range(1, 13)])
 # The categorical ones.
 exceptions_hospi = ['cat', 'taille_MCO', 'taille_C']
 exceptions_hospi.extend(['CI_A16_{}'.format(i) for i in range(1, 7)])
+exceptions_hospi.extend(['CI_A18_1'])
 cols_hospi.extend(exceptions_hospi)
 
 cols.append(cols_hospi)
@@ -197,6 +199,7 @@ for source in sources:
     data.prov_patient = data.prov_patient.apply(lambda s: int(s.split('-')[0]))
     data.age = data.age.apply(lambda s: int(s == '>75 ans'))
 
+
     # Merging.
     print("Shape before merging :", data.shape)
     data = pd.merge(data, hospidiag, how='left', on=['eta', 'an'])
@@ -205,6 +208,11 @@ for source in sources:
     # Changing eta
     data.eta = data.eta.apply(lambda s: int(str(s).replace('2A', '2000').replace('2B', '2001')))
     data['nom_eta'] = le.transform(data.nom_eta)
+
+    # Financial stuff
+    for i in range(1, 13):
+        data['F{}'.format(i)] = np.max([data['F{}_O'.format(i)], data['F{}_D'.format(i)]], axis=0)
+        data.drop(['F{}_O'.format(i), 'F{}_D'.format(i)], axis=1, inplace=True)
 
     # Export to csv
     suffix = 'test' if is_test else 'data'

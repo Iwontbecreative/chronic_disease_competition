@@ -18,6 +18,7 @@ def output_csv(pred, folder, filename, test=True, time=True):
                                                            sep=';',
                                                            header=True)
 
+
 def stack_csv(pred, folder, filename, test=True, time=True):
     time_at = datetime.now() if time else ""
     pred.index.name, pred.name = 'id', 'cible'
@@ -28,6 +29,7 @@ def stack_csv(pred, folder, filename, test=True, time=True):
                                                            header=True)
 
 # Splitting functions, used for cross_val
+
 
 def split(data, before=2012):
     """
@@ -55,15 +57,19 @@ def cv_split(data, i):
         return b, a, d, c
 
 
-def one_vs_previous(data, i, previous_years=2):
+def one_vs_previous(data, i, previous_years=1):
     """
     Predict one year according to the 'previous_years' years before.
     For this function we must have CV <= 5-previous_years
     """
-    year_to_test = 2008 + i + previous_years
-    year = data.an == year_to_test
-    previous = data.an.isin(np.arange(2008 + i, year_to_test))
-    Xtrain, Xtest = data[previous], data[year]
+    if not i:
+        Xtrain = data[data.an == 2009]
+        Xtest = data[data.an == 2008]
+    else:
+        year_to_test = 2008 + i + previous_years
+        year = data.an == year_to_test
+        previous = data.an.isin(np.arange(2008 + i, year_to_test))
+        Xtrain, Xtest = data[previous], data[year]
     ytrain, ytest = Xtrain.label, Xtest.label
     mask = ~Xtrain.columns.isin(['label'])
     return Xtrain.loc[:, mask], Xtest.loc[:, mask], ytrain, ytest
@@ -97,7 +103,6 @@ def benchmark(data):
             mask = (data.nombre_sej_ald == i) & (data.nombre_sej == j)
             benchmark['{}{}'.format(i, j)] = data[mask].label.mean()
     return benchmark
-
 
 
 def compare_to_benchmark(eta, global_bench):

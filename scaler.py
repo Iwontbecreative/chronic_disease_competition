@@ -1,7 +1,7 @@
 import argparse
 import pandas as pd
 
-parser = argparse.ArgumentParser(description="scale pedictions")
+parser = argparse.ArgumentParser(description="scale predictions")
 parser.add_argument('filename', type=str, help='Filename to scale')
 args = parser.parse_args()
 
