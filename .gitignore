@@ -6,4 +6,5 @@ first_level/
 hospidiag/
 hospidiag_excel/
 *.csv
+*.png
 test.zip
