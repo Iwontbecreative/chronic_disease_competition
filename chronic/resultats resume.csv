@@ -1,0 +1,10 @@
+Hospidiag,Scaling,Stacking,Algorithme,Score
+N/A,N/A,N,"Régression linéaire, plus proches voisins, etc.",Plus de 5
+N,N,N,Random Forest Regressor (RFR),3.66
+N,N,N,Extra Trees Regressor (ETR),4.55
+N,N,N,XGBoost (XGB),4.05
+O,N,N,Random Forest Regressor,2.98
+O,N,N,XGBoost,2.9
+O,O,N,Random Forest Regressor,2.65
+O,O,N,XGBoost,2.85
+O,O,O,"1er niveau : ETR, RFR, XGB. 2Ème : XGB",2.54
