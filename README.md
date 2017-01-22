@@ -23,20 +23,5 @@ The data was provided as is, which meant there was still some data engineering n
 
 ### Approach
 
-XXX
-
-#### Data cleaning and merging
-
-###### Managing memory constraints
-
-###### Merging files
-
-#### Machine learning approach
-
-###### Feature engineering
-
-###### Failed attempts
-
-###### Machine learning algorithms used and rationale
-
-###### Ensembling
+The detailed approach can be found in French in this [ipython
+notebook](https://github.com/Iwontbecreative/chronic_disease_competition/blob/master/chronic/Rapport%20Python.ipynb)
